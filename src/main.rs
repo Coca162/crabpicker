@@ -16,7 +16,7 @@ use winit::{
 fn main() {
     let event_loop = EventLoop::new();
 
-    let (_copium, map) = monitor_windows_with_screenshots(&event_loop);
+    let (_windows, map) = monitor_windows_with_screenshots(&event_loop);
 
     let mut position = None;
 
