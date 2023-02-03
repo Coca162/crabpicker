@@ -1,0 +1,13 @@
+[package]
+name = "crabdropper"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+winit = "0.28.1"
+screenshots = "0.4.6"
+image = "0.24.5"
+termcolor = "1.2.0"
+copypasta-ext = "0.4.1"
