@@ -1,33 +1,38 @@
 #![warn(clippy::all, clippy::nursery)]
 
+use color_eyre::eyre::Result;
 use copypasta_ext::{prelude::ClipboardProvider, x11_bin::ClipboardContext};
-use std::io::Write;
+use std::io::{Read, Write};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use winit::event_loop::EventLoop;
 
-pub mod window_pickers;
+mod color_event_loop;
+mod picker_context;
 
-use window_pickers::get_color;
+use color_event_loop::get_color;
 
-fn main() {
+fn main() -> Result<()> {
+    color_eyre::install()?;
+
     let mut event_loop = EventLoop::new();
 
     loop {
-        let (r, g, b) = get_color(&mut event_loop).unwrap();
+        if let Some((r, g, b)) = get_color(&mut event_loop)? {
+            let rgb_hex = format!("#{r:02X}{g:02X}{b:02X}");
 
-        let rgb_hex = format!("#{r:02X}{g:02X}{b:02X}");
+            print_result((r, g, b), &rgb_hex);
 
-        print_result((r, g, b), &rgb_hex);
+            let clip_res = ClipboardContext::new().and_then(|mut x| x.set_contents(rgb_hex));
 
-        let clip_res = ClipboardContext::new().and_then(|mut x| x.set_contents(rgb_hex));
-
-        if clip_res.is_err() {
-            println!("Failed to set clipboard content (do you have xclip?)");
+            if clip_res.is_err() {
+                println!("Failed to set clipboard content (do you have xclip/wl-clipboard?)");
+            }
+        } else {
+            println!("Picker was cancelled")
         }
 
-        println!("bruh!");
-
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        println!("Press any key to take another pick...");
+        let _ = std::io::stdin().read(&mut [0u8]).unwrap();
     }
 }
 
