@@ -165,13 +165,14 @@ impl PickerContext {
 
         // SAFETY: `screenshots` crate should be returning RGBA8 screenshots
         #[cfg(feature = "screenshots_crate")]
-        let buffer = final_image.as_rgba8().unwrap().chunks(4);
+        let buffer = final_image.as_rgba8().unwrap();
 
         // Flameshot does not provide a reliably8 RGB or RGBA8
         #[cfg(feature = "flameshot")]
-        let buffer = final_image.to_rgba8().chunks(4);
+        let buffer = final_image.to_rgba8();
 
         let buffer: Vec<u32> = buffer
+            .chunks(4)
             .map(|rgb| rgb[2] as u32 | ((rgb[1] as u32) << 8) | ((rgb[0] as u32) << 16))
             .collect();
 
