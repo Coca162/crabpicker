@@ -2,7 +2,7 @@
 
 use color_eyre::eyre::Result;
 use copypasta_ext::{prelude::ClipboardProvider, x11_bin::ClipboardContext};
-use std::io::{Read, Write};
+use std::io::Write;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use winit::event_loop::EventLoop;
 
@@ -17,24 +17,21 @@ fn main() -> Result<()> {
 
     let mut event_loop: EventLoop<()> = EventLoop::new();
 
-    loop {
-        if let Some((r, g, b)) = get_color(&mut event_loop)? {
-            let rgb_hex = format!("#{r:02X}{g:02X}{b:02X}");
+    if let Some((r, g, b)) = get_color(&mut event_loop)? {
+        let rgb_hex = format!("#{r:02X}{g:02X}{b:02X}");
 
-            print_result((r, g, b), &rgb_hex);
+        print_result((r, g, b), &rgb_hex);
 
-            let clip_res = ClipboardContext::new().and_then(|mut x| x.set_contents(rgb_hex));
+        let clip_res = ClipboardContext::new().and_then(|mut x| x.set_contents(rgb_hex));
 
-            if clip_res.is_err() {
-                println!("Failed to set clipboard content (do you have xclip/wl-clipboard?)");
-            }
-        } else {
-            println!("Picker was cancelled")
+        if clip_res.is_err() {
+            println!("Failed to set clipboard content (do you have xclip/wl-clipboard?)");
         }
-
-        println!("Press any key to take another pick...");
-        let _ = std::io::stdin().read(&mut [0u8]).unwrap();
+    } else {
+        println!("Picker was cancelled")
     }
+
+    Ok(())
 }
 
 fn print_result((r, g, b): (u8, u8, u8), rgb_hex: &str) -> Option<()> {
