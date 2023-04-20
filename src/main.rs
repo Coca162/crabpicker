@@ -8,13 +8,14 @@ use winit::event_loop::EventLoop;
 
 mod color_event_loop;
 mod picker_context;
+mod screenshots;
 
 use color_event_loop::get_color;
 
 fn main() -> Result<()> {
     color_eyre::install()?;
 
-    let mut event_loop = EventLoop::new();
+    let mut event_loop: EventLoop<()> = EventLoop::new();
 
     loop {
         if let Some((r, g, b)) = get_color(&mut event_loop)? {

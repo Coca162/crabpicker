@@ -1,6 +1,9 @@
 use color_eyre::eyre::Result;
 use winit::{
-    event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent},
+    event::{
+        ElementState, Event, KeyboardInput, ModifiersState, MouseButton, VirtualKeyCode,
+        WindowEvent,
+    },
     event_loop::EventLoop,
     platform::run_return::EventLoopExtRunReturn,
 };
@@ -25,7 +28,23 @@ pub fn get_color(event_loop: &mut EventLoop<()>) -> Result<Option<(u8, u8, u8)>>
                         ..
                     },
                 window_id,
-            } => position = Some((new_position, window_id)),
+            } => {
+                let new_position = (new_position.cast::<u32>(), window_id);
+
+                position = if ctx.in_bounds(&new_position) {
+                    Some(new_position)
+                } else {
+                    None
+                };
+
+                ctx.request_draw(window_id);
+            }
+            Event::WindowEvent {
+                event: WindowEvent::CursorLeft { .. },
+                window_id,
+            } => {
+                ctx.request_draw(window_id);
+            }
             Event::WindowEvent {
                 event:
                     WindowEvent::MouseInput {
@@ -35,10 +54,7 @@ pub fn get_color(event_loop: &mut EventLoop<()>) -> Result<Option<(u8, u8, u8)>>
                     },
                 ..
             } => {
-                if let Some(new_colors) = position
-                    .map(|(pos, id)| (pos.cast::<u32>(), id))
-                    .and_then(|(pos, id)| ctx.get_pixel(&id, pos))
-                {
+                if let Some(new_colors) = position.and_then(|(pos, id)| ctx.get_pixel(&id, pos)) {
                     control_flow.set_exit();
                     colors = Some(new_colors);
                 }
@@ -58,6 +74,13 @@ pub fn get_color(event_loop: &mut EventLoop<()>) -> Result<Option<(u8, u8, u8)>>
                 ..
             } => {
                 control_flow.set_exit();
+            }
+            Event::WindowEvent {
+                event: WindowEvent::ModifiersChanged(ModifiersState::CTRL),
+                window_id,
+            } => {
+                ctx.ctrl_pressed = !ctx.ctrl_pressed;
+                ctx.request_draw(window_id);
             }
             Event::RedrawRequested(window_id) => {
                 ctx.redraw_window(&window_id, position);
