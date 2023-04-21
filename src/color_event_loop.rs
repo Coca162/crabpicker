@@ -1,8 +1,8 @@
 use color_eyre::eyre::Result;
 use winit::{
     event::{
-        ElementState, Event, KeyboardInput, ModifiersState, MouseButton, VirtualKeyCode,
-        WindowEvent, MouseScrollDelta, TouchPhase,
+        ElementState, Event, KeyboardInput, ModifiersState, MouseButton, MouseScrollDelta,
+        TouchPhase, VirtualKeyCode, WindowEvent,
     },
     event_loop::EventLoop,
     platform::run_return::EventLoopExtRunReturn,
@@ -19,7 +19,7 @@ pub fn get_color(event_loop: &mut EventLoop<()>) -> Result<Option<(u8, u8, u8)>>
 
     event_loop.run_return(|event, _, control_flow| {
         control_flow.set_wait();
-        
+
         match event {
             Event::WindowEvent {
                 event:
@@ -83,10 +83,10 @@ pub fn get_color(event_loop: &mut EventLoop<()>) -> Result<Option<(u8, u8, u8)>>
                 ..
             } => {
                 ctx.hold_zoom = true;
-                
+
                 if let Some((_, window_id)) = position {
                     ctx.request_draw(window_id);
-                }            
+                }
             }
             Event::WindowEvent {
                 event:
@@ -118,7 +118,13 @@ pub fn get_color(event_loop: &mut EventLoop<()>) -> Result<Option<(u8, u8, u8)>>
                 }
             }
             Event::WindowEvent {
-                event: WindowEvent::MouseWheel {delta: MouseScrollDelta::LineDelta(_, vertical_amount), phase: TouchPhase::Moved, .. }, ..
+                event:
+                    WindowEvent::MouseWheel {
+                        delta: MouseScrollDelta::LineDelta(_, vertical_amount),
+                        phase: TouchPhase::Moved,
+                        ..
+                    },
+                ..
             } => {
                 ctx.change_zoom(vertical_amount);
 
@@ -129,7 +135,8 @@ pub fn get_color(event_loop: &mut EventLoop<()>) -> Result<Option<(u8, u8, u8)>>
             Event::RedrawRequested(window_id) => {
                 if let Some((pos, cursor_window)) = position {
                     if ctx.should_display_zoom() && cursor_window == window_id {
-                        ctx.redraw_window(window_id, pos).unwrap_or_else(|| ctx.draw_empty_window(window_id));
+                        ctx.redraw_window(window_id, pos)
+                            .unwrap_or_else(|| ctx.draw_empty_window(window_id));
                     } else {
                         ctx.draw_empty_window(window_id);
                     }

@@ -19,7 +19,7 @@ pub struct PickerContext {
     graphics: HashMap<WindowId, (GraphicsContext, DynamicImage)>,
     pub toggle_zoom: bool,
     pub hold_zoom: bool,
-    pub zoom: u32
+    pub zoom: u32,
 }
 
 impl PickerContext {
@@ -58,7 +58,7 @@ impl PickerContext {
             graphics,
             toggle_zoom: false,
             hold_zoom: false,
-            zoom: 16
+            zoom: 16,
         })
     }
 
@@ -73,10 +73,7 @@ impl PickerContext {
         Some((pixel[0], pixel[1], pixel[2]))
     }
 
-    pub fn draw_empty_window(
-        &mut self,
-        window_id: WindowId
-    ) {
+    pub fn draw_empty_window(&mut self, window_id: WindowId) {
         let (graphics_ctx, ref image) = self.graphics.get_mut(&window_id).unwrap();
 
         save_image_to_graphics_buffer(graphics_ctx, image);
@@ -89,7 +86,10 @@ impl PickerContext {
     ) -> Option<()> {
         let (graphics_ctx, ref image) = self.graphics.get_mut(&window_id).unwrap();
 
-        if !image.in_bounds(mouse_pos.x.checked_sub(SQUARE_HALFWAY)?, mouse_pos.y.checked_sub(SQUARE_HALFWAY)?) {
+        if !image.in_bounds(
+            mouse_pos.x.checked_sub(SQUARE_HALFWAY)?,
+            mouse_pos.y.checked_sub(SQUARE_HALFWAY)?,
+        ) {
             return None;
         }
 
@@ -105,7 +105,12 @@ impl PickerContext {
         let zoomed_size: u32 = SQUARE_SIZE * self.zoom + 1;
         let zoom_halfway: u32 = zoomed_size / 2;
 
-        let cropped_image = image.crop_imm(mouse_pos.x - SQUARE_HALFWAY, mouse_pos.y - SQUARE_HALFWAY, SQUARE_SIZE, SQUARE_SIZE);
+        let cropped_image = image.crop_imm(
+            mouse_pos.x - SQUARE_HALFWAY,
+            mouse_pos.y - SQUARE_HALFWAY,
+            SQUARE_SIZE,
+            SQUARE_SIZE,
+        );
 
         let mut total_light_value = 0;
 
@@ -118,13 +123,14 @@ impl PickerContext {
         let average_light_value = total_light_value / (SQUARE_SIZE.pow(2));
         let border_color = (255 - average_light_value) as u8;
 
-        let mut zoomed_in_image = cropped_image.resize(zoomed_size, zoomed_size, imageops::FilterType::Nearest);
+        let mut zoomed_in_image =
+            cropped_image.resize(zoomed_size, zoomed_size, imageops::FilterType::Nearest);
 
         draw_grid(
             (zoomed_size, zoomed_size),
             &mut zoomed_in_image,
             border_color,
-            self.zoom as usize
+            self.zoom as usize,
         );
 
         imageops::replace(
@@ -133,7 +139,6 @@ impl PickerContext {
             (mouse_pos.x as i64) - zoom_halfway as i64,
             (mouse_pos.y as i64) - zoom_halfway as i64,
         );
-
 
         save_image_to_graphics_buffer(graphics_ctx, &image);
 

@@ -1,7 +1,7 @@
 #![warn(clippy::all, clippy::nursery)]
 
 use color_eyre::eyre::Result;
-use copypasta_ext::{prelude::ClipboardProvider, x11_bin::ClipboardContext};
+use copypasta_ext::display::DisplayServer;
 use std::io::Write;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use winit::event_loop::EventLoop;
@@ -21,11 +21,13 @@ fn main() -> Result<()> {
         let rgb_hex = format!("#{r:02X}{g:02X}{b:02X}");
 
         print_result((r, g, b), &rgb_hex);
+        let clip_res = DisplayServer::select()
+            .try_context()
+            .map(|mut x| x.set_contents(rgb_hex))
+            .expect("Could not find display server");
 
-        let clip_res = ClipboardContext::new().and_then(|mut x| x.set_contents(rgb_hex));
-
-        if clip_res.is_err() {
-            println!("Failed to set clipboard content (do you have xclip/wl-clipboard?)");
+        if let Err(err) = clip_res {
+            println!("Failed to set clipboard content (do you have xclip/wl-clipboard?): {err}");
         }
     } else {
         println!("Picker was cancelled")
