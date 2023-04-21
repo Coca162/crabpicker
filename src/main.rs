@@ -21,6 +21,7 @@ fn main() -> Result<()> {
         let rgb_hex = format!("#{r:02X}{g:02X}{b:02X}");
 
         print_result((r, g, b), &rgb_hex);
+        
         let clip_res = DisplayServer::select()
             .try_context()
             .map(|mut x| x.set_contents(rgb_hex))
