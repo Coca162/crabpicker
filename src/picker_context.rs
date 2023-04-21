@@ -1,4 +1,4 @@
-use std::{collections::HashMap, iter};
+use std::collections::HashMap;
 
 use color_eyre::{
     eyre::{eyre, Result},
@@ -9,7 +9,7 @@ use softbuffer::{GraphicsContext, SoftBufferError};
 use winit::{
     dpi::PhysicalPosition,
     event_loop::EventLoop,
-    window::{Fullscreen, Window, WindowBuilder, WindowId},
+    window::{Fullscreen, Window, WindowBuilder, WindowId, WindowLevel},
 };
 
 use crate::screenshots::screenshots_ordered;
@@ -17,7 +17,9 @@ use crate::screenshots::screenshots_ordered;
 pub struct PickerContext {
     windows: Vec<Window>,
     graphics: HashMap<WindowId, (GraphicsContext, DynamicImage)>,
-    pub ctrl_pressed: bool,
+    pub toggle_zoom: bool,
+    pub hold_zoom: bool,
+    pub zoom: u32
 }
 
 impl PickerContext {
@@ -31,6 +33,8 @@ impl PickerContext {
             .map(|monitor| {
                 let build = WindowBuilder::new()
                     .with_fullscreen(Some(Fullscreen::Borderless(Some(monitor))))
+                    .with_decorations(false)
+                    .with_window_level(WindowLevel::AlwaysOnTop)
                     .build(event_loop)
                     .map_err(Into::<Report>::into)?;
 
@@ -52,7 +56,9 @@ impl PickerContext {
         Ok(Self {
             windows,
             graphics,
-            ctrl_pressed: false,
+            toggle_zoom: false,
+            hold_zoom: false,
+            zoom: 16
         })
     }
 
@@ -67,116 +73,69 @@ impl PickerContext {
         Some((pixel[0], pixel[1], pixel[2]))
     }
 
+    pub fn draw_empty_window(
+        &mut self,
+        window_id: WindowId
+    ) {
+        let (graphics_ctx, ref image) = self.graphics.get_mut(&window_id).unwrap();
+
+        save_image_to_graphics_buffer(graphics_ctx, image);
+    }
+
     pub fn redraw_window(
         &mut self,
-        window_id: &WindowId,
-        position: Option<(PhysicalPosition<u32>, WindowId)>,
+        window_id: WindowId,
+        mouse_pos: PhysicalPosition<u32>,
     ) -> Option<()> {
-        let (graphics_ctx, ref image) = self.graphics.get_mut(window_id)?;
+        let (graphics_ctx, ref image) = self.graphics.get_mut(&window_id).unwrap();
 
-        let mut possible_image;
+        if !image.in_bounds(mouse_pos.x.checked_sub(SQUARE_HALFWAY)?, mouse_pos.y.checked_sub(SQUARE_HALFWAY)?) {
+            return None;
+        }
 
-        let final_image = if let Some((pos, ref mouse_window)) = position {
-            if mouse_window == window_id && self.ctrl_pressed {
-                possible_image = image.clone();
-                // // SAFETY: This ignored bound checking because the image should be as big
-                // // as the window is, also the bound checking on `get_pixel` is broken lol
-                // // https://github.com/image-rs/image/pull/1910
-                // let pixel = unsafe { possible_image.unsafe_get_pixel(pos.x, pos.y).0 };
+        if !image.in_bounds(mouse_pos.x + SQUARE_HALFWAY, mouse_pos.y + SQUARE_HALFWAY) {
+            return None;
+        }
 
-                // let width = 100;
-                // let height = 100;
-                // let color: Rgba<u8> = Rgba(pixel); // Red color
+        let mut image = image.clone();
 
-                // let mut square = generate_picker_square(color);
+        const SQUARE_SIZE: u32 = 11;
+        const SQUARE_HALFWAY: u32 = SQUARE_SIZE / 2;
+        // An additional line for the final x and y grid lines
+        let zoomed_size: u32 = SQUARE_SIZE * self.zoom + 1;
+        let zoom_halfway: u32 = zoomed_size / 2;
 
-                // let color_image =
-                //     ImageBuffer::from_fn(width, height, |_x, _y| square.next().unwrap());
+        let cropped_image = image.crop_imm(mouse_pos.x - SQUARE_HALFWAY, mouse_pos.y - SQUARE_HALFWAY, SQUARE_SIZE, SQUARE_SIZE);
 
-                let color_image = image.crop_imm(pos.x - 5, pos.y - 5, 11, 11);
+        let mut total_light_value = 0;
 
-                let mut total_light_value = 0;
-                let num_pixels = 11 * 11;
+        for (_, _, pixel) in cropped_image.pixels() {
+            let grayscale = pixel.to_luma();
 
-                for (_, _, pixel) in color_image.pixels() {
-                    let grayscale = pixel.to_luma();
+            total_light_value += grayscale.0[0] as u32;
+        }
 
-                    total_light_value += grayscale.0[0] as u32;
-                }
+        let average_light_value = total_light_value / (SQUARE_SIZE.pow(2));
+        let border_color = (255 - average_light_value) as u8;
 
-                let average_light_value = (255 - (total_light_value / num_pixels)) as u8;
+        let mut zoomed_in_image = cropped_image.resize(zoomed_size, zoomed_size, imageops::FilterType::Nearest);
 
-                // unsafe { color_image.unsafe_put_pixel(0, 0, Rgba([0, 0, 0, 0])) };
-                // unsafe { color_image.unsafe_put_pixel(1, 0, Rgba([0, 0, 0, 0])) };
-                // unsafe { color_image.unsafe_put_pixel(0, 1, Rgba([0, 0, 0, 0])) };
+        draw_grid(
+            (zoomed_size, zoomed_size),
+            &mut zoomed_in_image,
+            border_color,
+            self.zoom as usize
+        );
 
-                let mut color_image = color_image.resize(177, 177, imageops::FilterType::Nearest);
+        imageops::replace(
+            &mut image,
+            &zoomed_in_image,
+            (mouse_pos.x as i64) - zoom_halfway as i64,
+            (mouse_pos.y as i64) - zoom_halfway as i64,
+        );
 
-                let (width, height) = color_image.dimensions();
 
-                // Draw the grid
-                for x in 0..width {
-                    if x % 16 == 0 {
-                        for y in 0..height {
-                            color_image.put_pixel(
-                                x,
-                                y,
-                                Rgba([
-                                    average_light_value,
-                                    average_light_value,
-                                    average_light_value,
-                                    255,
-                                ]),
-                            );
-                        }
-                    }
-                }
-                for y in 0..height {
-                    if y % 16 == 0 {
-                        for x in 0..width {
-                            color_image.put_pixel(
-                                x,
-                                y,
-                                Rgba([
-                                    average_light_value,
-                                    average_light_value,
-                                    average_light_value,
-                                    255,
-                                ]),
-                            );
-                        }
-                    }
-                }
-
-                imageops::overlay(
-                    &mut possible_image,
-                    &color_image,
-                    pos.x as i64 - 88,
-                    pos.y as i64 - 88,
-                );
-
-                &possible_image
-            } else {
-                image
-            }
-        } else {
-            image
-        };
-
-        // SAFETY: `screenshots` crate should be returning RGBA8 screenshots
-        #[cfg(feature = "screenshots_crate")]
-        let buffer = final_image.as_rgba8().unwrap();
-
-        // Flameshot does not provide a reliably8 RGB or RGBA8
-        #[cfg(feature = "flameshot")]
-        let buffer = final_image.to_rgba8();
-
-        let buffer: Vec<u32> = buffer
-            .chunks(4)
-            .map(|rgb| rgb[2] as u32 | ((rgb[1] as u32) << 8) | ((rgb[0] as u32) << 16))
-            .collect();
-
-        graphics_ctx.set_buffer(&buffer, image.width() as u16, image.height() as u16);
+        save_image_to_graphics_buffer(graphics_ctx, &image);
 
         Some(())
     }
@@ -189,35 +148,53 @@ impl PickerContext {
             .request_redraw();
     }
 
-    pub fn in_bounds(&self, (pos, window_id): &(PhysicalPosition<u32>, WindowId)) -> bool {
-        self.graphics[window_id].1.in_bounds(pos.x, pos.y)
+    pub const fn should_display_zoom(&self) -> bool {
+        self.toggle_zoom ^ self.hold_zoom
+    }
+
+    pub fn change_zoom(&mut self, change_in_zoom: f32) {
+        if !self.should_display_zoom() {
+            return;
+        }
+
+        let change_in_zoom = (change_in_zoom as i32) * 2;
+        if change_in_zoom.is_negative() {
+            if self.zoom != 4 {
+                self.zoom /= change_in_zoom.unsigned_abs();
+            }
+        } else if self.zoom != 64 {
+            self.zoom *= change_in_zoom.unsigned_abs();
+        }
     }
 }
 
-fn generate_picker_square(pixel: Rgba<u8>) -> impl Iterator<Item = Rgba<u8>> {
-    const SIZE: usize = 100;
-    const BORDER_THICKNESS: usize = 2;
+fn save_image_to_graphics_buffer(graphics_ctx: &mut GraphicsContext, image: &DynamicImage) {
+    let buffer = image
+        .as_rgba8()
+        .map(|image| image.chunks(4))
+        // SAFETY: `screenshots` crate and flameshot should both be returning either RGBA8 or RGB
+        .unwrap_or_else(|| image.as_rgb8().unwrap().chunks(3));
 
-    let inverted = {
-        let [r, g, b, a] = pixel.0;
+    let buffer: Vec<u32> = buffer
+        .map(|rgb| rgb[2] as u32 | ((rgb[1] as u32) << 8) | ((rgb[0] as u32) << 16))
+        .collect();
 
-        Rgba([255 - r, 255 - g, 255 - b, a])
-    };
+    graphics_ctx.set_buffer(&buffer, image.width() as u16, image.height() as u16);
+}
 
-    let horizintal_border = (0..SIZE).map(move |_| inverted);
+fn draw_grid((width, height): (u32, u32), color_image: &mut DynamicImage, color: u8, zoom: usize) {
+    let color = Rgba([color, color, color, 255]);
 
-    let horizintal_inner = (0..(SIZE - (BORDER_THICKNESS * 2))).flat_map(move |_| {
-        iter::once(inverted)
-            .chain(iter::once(inverted))
-            .chain((0..(SIZE - (BORDER_THICKNESS * 2))).map(move |_| pixel))
-            .chain(iter::once(inverted))
-            .chain(iter::once(inverted))
-    });
+    // We need two for loops because the crop may not always be a square
+    for x in (0..width).step_by(zoom) {
+        for y in 0..height {
+            color_image.put_pixel(x, y, color);
+        }
+    }
 
-    horizintal_border
-        .clone()
-        .chain(horizintal_border.clone())
-        .chain(horizintal_inner)
-        .chain(horizintal_border.clone())
-        .chain(horizintal_border)
+    for y in (0..height).step_by(zoom) {
+        for x in 0..width {
+            color_image.put_pixel(x, y, color);
+        }
+    }
 }

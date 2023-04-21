@@ -2,7 +2,7 @@ use std::process::Command;
 
 use color_eyre::Result;
 use image::{DynamicImage, ImageFormat};
-use winit::{event_loop::EventLoop, monitor::MonitorHandle};
+use winit::monitor::MonitorHandle;
 
 /// This will return in the same order as the given `monitors`
 pub fn screenshots_ordered(monitors: &[MonitorHandle]) -> Result<Vec<DynamicImage>> {
