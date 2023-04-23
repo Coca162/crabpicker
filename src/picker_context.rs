@@ -39,7 +39,9 @@ impl PickerContext {
 
                 let mut builder = WindowBuilder::new()
                     .with_decorations(false)
-                    .with_window_level(WindowLevel::AlwaysOnTop);
+                    .with_window_level(WindowLevel::AlwaysOnTop)
+                    .with_resizable(false)
+                    .with_maximized(true);
 
                 if args.exclusive_fullscreen {
                     let video_mode = get_ideal_video_mode(monitor);
@@ -227,6 +229,9 @@ fn get_ideal_video_mode(monitor: MonitorHandle) -> VideoMode {
             Ordering::Less => prev,
         }
     }).unwrap()
+    // let pos = monitor.position();
+    // let (x, y) = (pos.x, pos.y);
+    // println!("Ideal video mode for {}: {video_mode}", monitor.name().unwrap_or(format!("({x}x{y})")));
 }
 
 fn image_to_softbuffer(image: &DynamicImage) -> CachedSoftBufferImage {
