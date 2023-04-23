@@ -114,11 +114,12 @@ pub fn get_color(args: &Args) -> Result<Option<(u8, u8, u8)>> {
                         ..
                     },
                 ..
-            } =>
+            } => {
                 ctx.hold_right_click = match state {
                     ElementState::Pressed => true,
                     ElementState::Released => false,
-                },
+                }
+            }
             Event::WindowEvent {
                 event: WindowEvent::ModifiersChanged(ModifiersState::CTRL),
                 ..

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{cmp::Ordering, collections::HashMap};
 
 use color_eyre::{
     eyre::{eyre, Result},
@@ -9,7 +9,7 @@ use softbuffer::{GraphicsContext, SoftBufferError};
 use winit::{
     dpi::PhysicalPosition,
     event_loop::EventLoop,
-    window::{Fullscreen, Window, WindowBuilder, WindowId, WindowLevel},
+    window::{Fullscreen, Window, WindowBuilder, WindowId, WindowLevel}, monitor::{VideoMode, MonitorHandle},
 };
 
 use crate::screenshots::screenshots_ordered;
@@ -36,15 +36,24 @@ impl PickerContext {
         let windows = monitors
             .into_iter()
             .map(|monitor| {
-                let build = WindowBuilder::new()
-                    .with_fullscreen(Some(Fullscreen::Borderless(Some(monitor))))
+
+                let mut builder = WindowBuilder::new()
                     .with_decorations(false)
-                    .with_window_level(WindowLevel::AlwaysOnTop)
+                    .with_window_level(WindowLevel::AlwaysOnTop);
+
+                if args.exclusive_fullscreen {
+                    let video_mode = get_ideal_video_mode(monitor);
+                    builder = builder.with_fullscreen(Some(Fullscreen::Exclusive(video_mode)));
+                } else {
+                    builder = builder.with_fullscreen(Some(Fullscreen::Borderless(Some(monitor))));
+                }
+
+                let built = builder
                     .build(event_loop)
                     .map_err(Into::<Report>::into)?;
 
-                build.set_cursor_icon(winit::window::CursorIcon::Crosshair);
-                Ok(build)
+                built.set_cursor_icon(winit::window::CursorIcon::Crosshair);
+                Ok(built)
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -199,6 +208,25 @@ impl PickerContext {
             self.zoom_size += change_in_size.unsigned_abs();
         }
     }
+}
+
+fn get_ideal_video_mode(monitor: MonitorHandle) -> VideoMode {
+    monitor.video_modes().reduce(|prev, current| {
+        let size: (u32, u32) = current.size().into();
+        let other_size: (u32, u32) = prev.size().into();
+
+        match size.cmp(&other_size).then(
+            current.bit_depth().cmp(&prev.bit_depth()).then(
+                current
+                    .refresh_rate_millihertz()
+                    .cmp(&prev.refresh_rate_millihertz()),
+            ),
+        ) {
+            Ordering::Greater => current,
+            Ordering::Equal => current,
+            Ordering::Less => prev,
+        }
+    }).unwrap()
 }
 
 fn image_to_softbuffer(image: &DynamicImage) -> CachedSoftBufferImage {

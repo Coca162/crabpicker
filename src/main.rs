@@ -36,14 +36,21 @@ pub struct Args {
     #[arg(long, default_value_t = 11, value_parser = valid_zoom_size)]
     zoom_size: u32,
 
+    /// The color format that will be printed and put in your clipboard
     #[arg(long, default_value_t = ColorFormat::Hex)]
     color_format: ColorFormat,
 
+    /// Disables the terminal colors, useful for when piping to other programs
     #[arg(long, default_value_t = false)]
     disable_term_colors: bool,
 
+    /// Disables the clipboard
     #[arg(long, default_value_t = false)]
     disable_clipboard: bool,
+
+    /// This potentially helps with TWMs which are fussy with fullscreening
+    #[arg(long, default_value_t = false)]
+    exclusive_fullscreen: bool,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
