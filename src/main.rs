@@ -19,7 +19,7 @@ use color_event_loop::get_color;
     version,
     about,
     long_about = "A GUI color picker with a tooglable zoom via CTRL or on hold with Z
-You can either use left click or ENTER to get the color your mouse is on into your cliboard and CLI
+You can either use left click or ENTER to ouput the color to your CLI and your clipboard
 When zooming you can use the scroll wheel to change the zoom scale and with shift to change the zoom size
 You can move around for precise measurement with wasd, vim or arrow key movement"
 )]

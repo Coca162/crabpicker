@@ -20,6 +20,8 @@ pub fn get_color(args: &Args) -> Result<Option<(u8, u8, u8)>> {
 
     let mut colors = None;
 
+    let mut mouse_events = 0;
+
     event_loop.run_return(|event, _, control_flow| {
         control_flow.set_wait();
 
@@ -32,11 +34,17 @@ pub fn get_color(args: &Args) -> Result<Option<(u8, u8, u8)>> {
                     },
                 window_id,
             } => {
+                mouse_events += 1;
+
                 position = Some((new_position.cast::<u32>(), window_id));
 
                 if ctx.should_display_zoom() {
                     // Prevents initial incorrect mouse position from sticking to other windows
-                    ctx.request_draw_all();
+                    if mouse_events >= 5 {
+                        ctx.request_draw_all();
+                    } else {
+                        ctx.request_draw(window_id);
+                    }
                 }
             }
             Event::WindowEvent {
