@@ -11,3 +11,5 @@
     - Partially works, but it's very buggy
 
 If you are having issues with the default features, try `cargo install crabpicker --no-default-features --features=flameshot`. Requires you have [flameshot](https://flameshot.org/) installed!
+
+The x11 feature uses code from https://github.com/TheHellBox/x11-screenshot-rs so thanks to them for making it exist!
