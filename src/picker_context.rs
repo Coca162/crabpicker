@@ -13,17 +13,22 @@ use winit::{
 };
 
 use crate::screenshots::screenshots_ordered;
+use crate::Args;
 
 pub struct PickerContext {
     windows: Vec<Window>,
-    graphics: HashMap<WindowId, (GraphicsContext, DynamicImage)>,
+    graphics: HashMap<WindowId, (GraphicsContext, DynamicImage, CachedSoftBufferImage)>,
     pub toggle_zoom: bool,
     pub hold_zoom: bool,
+    pub hold_right_click: bool,
     pub zoom: u32,
+    pub zoom_size: u32,
 }
 
+type CachedSoftBufferImage = Vec<u32>;
+
 impl PickerContext {
-    pub fn new(event_loop: &EventLoop<()>) -> Result<Self> {
+    pub fn new(event_loop: &EventLoop<()>, args: &Args) -> Result<Self> {
         let monitors = event_loop.available_monitors().collect::<Vec<_>>();
 
         let images = screenshots_ordered(&monitors)?;
@@ -48,7 +53,8 @@ impl PickerContext {
             .zip(images)
             .map(|(window, image)| {
                 let ctx = unsafe { GraphicsContext::new(&window, &window) }?;
-                Ok((window.id(), (ctx, image)))
+                let cached = image_to_softbuffer(&image);
+                Ok((window.id(), (ctx, image, cached)))
             })
             .collect::<Result<_, SoftBufferError>>()
             .map_err(|err| eyre!("Could not create graphics context: {err}"))?;
@@ -57,8 +63,10 @@ impl PickerContext {
             windows,
             graphics,
             toggle_zoom: false,
-            hold_zoom: false,
-            zoom: 16,
+            hold_zoom: args.zoom,
+            hold_right_click: true,
+            zoom: args.scale.pow(2),
+            zoom_size: args.zoom_size,
         })
     }
 
@@ -67,16 +75,16 @@ impl PickerContext {
         window_id: &WindowId,
         position: PhysicalPosition<u32>,
     ) -> Option<(u8, u8, u8)> {
-        let (_, image) = self.graphics.get(window_id)?;
+        let (_, image, _) = self.graphics.get(window_id)?;
         let pixel = image.get_pixel(position.x, position.y).0;
 
         Some((pixel[0], pixel[1], pixel[2]))
     }
 
     pub fn draw_empty_window(&mut self, window_id: WindowId) {
-        let (graphics_ctx, ref image) = self.graphics.get_mut(&window_id).unwrap();
+        let (graphics_ctx, ref image, ref cached) = self.graphics.get_mut(&window_id).unwrap();
 
-        save_image_to_graphics_buffer(graphics_ctx, image);
+        graphics_ctx.set_buffer(cached, image.width() as u16, image.height() as u16);
     }
 
     pub fn redraw_window(
@@ -84,33 +92,39 @@ impl PickerContext {
         window_id: WindowId,
         mouse_pos: PhysicalPosition<u32>,
     ) -> Option<()> {
-        let (graphics_ctx, ref image) = self.graphics.get_mut(&window_id).unwrap();
+        let (graphics_ctx, ref image, _) = self.graphics.get_mut(&window_id).unwrap();
+
+        let square_halfway: u32 = self.zoom_size / 2;
+
+        // // Sometimes the middle pixel is not the one which gets picked for some reason
+        // // we use this as a precaution to guarantee the picked pixel is always the one being shown
+        // let middle_pixel = image.get_pixel(mouse_pos.x, mouse_pos.y);
 
         if !image.in_bounds(
-            mouse_pos.x.checked_sub(SQUARE_HALFWAY)?,
-            mouse_pos.y.checked_sub(SQUARE_HALFWAY)?,
+            mouse_pos.x.checked_sub(square_halfway)?,
+            mouse_pos.y.checked_sub(square_halfway)?,
         ) {
             return None;
         }
 
-        if !image.in_bounds(mouse_pos.x + SQUARE_HALFWAY, mouse_pos.y + SQUARE_HALFWAY) {
+        if !image.in_bounds(mouse_pos.x + square_halfway, mouse_pos.y + square_halfway) {
             return None;
         }
 
         let mut image = image.clone();
 
-        const SQUARE_SIZE: u32 = 11;
-        const SQUARE_HALFWAY: u32 = SQUARE_SIZE / 2;
         // An additional line for the final x and y grid lines
-        let zoomed_size: u32 = SQUARE_SIZE * self.zoom + 1;
+        let zoomed_size: u32 = self.zoom_size * self.zoom + 1;
         let zoom_halfway: u32 = zoomed_size / 2;
 
         let cropped_image = image.crop_imm(
-            mouse_pos.x - SQUARE_HALFWAY,
-            mouse_pos.y - SQUARE_HALFWAY,
-            SQUARE_SIZE,
-            SQUARE_SIZE,
+            mouse_pos.x - square_halfway,
+            mouse_pos.y - square_halfway,
+            self.zoom_size,
+            self.zoom_size,
         );
+
+        // cropped_image.put_pixel(SQUARE_HALFWAY, SQUARE_HALFWAY, middle_pixel);
 
         let mut total_light_value = 0;
 
@@ -120,7 +134,7 @@ impl PickerContext {
             total_light_value += grayscale.0[0] as u32;
         }
 
-        let average_light_value = total_light_value / (SQUARE_SIZE.pow(2));
+        let average_light_value = total_light_value / (self.zoom_size.pow(2));
         let border_color = (255 - average_light_value) as u8;
 
         let mut zoomed_in_image =
@@ -140,9 +154,17 @@ impl PickerContext {
             (mouse_pos.y as i64) - zoom_halfway as i64,
         );
 
-        save_image_to_graphics_buffer(graphics_ctx, &image);
+        let buffer = image_to_softbuffer(&image);
+
+        graphics_ctx.set_buffer(&buffer, image.width() as u16, image.height() as u16);
 
         Some(())
+    }
+
+    pub fn request_draw_all(&self) {
+        self.windows
+            .iter()
+            .for_each(|window| window.request_redraw());
     }
 
     pub fn request_draw(&self, window_id: WindowId) {
@@ -158,33 +180,39 @@ impl PickerContext {
     }
 
     pub fn change_zoom(&mut self, change_in_zoom: f32) {
-        if !self.should_display_zoom() {
-            return;
-        }
-
         let change_in_zoom = (change_in_zoom as i32) * 2;
         if change_in_zoom.is_negative() {
-            if self.zoom != 4 {
+            if self.zoom != 2 {
                 self.zoom /= change_in_zoom.unsigned_abs();
             }
-        } else if self.zoom != 64 {
+        } else if self.zoom != 256 {
             self.zoom *= change_in_zoom.unsigned_abs();
+        }
+    }
+
+    pub fn change_zoom_size(&mut self, change_in_size: f32) {
+        let change_in_size = (change_in_size as i32) * 2;
+
+        if change_in_size.is_negative() {
+            self.zoom_size = self.zoom_size.saturating_sub(change_in_size.unsigned_abs());
+        } else {
+            self.zoom_size += change_in_size.unsigned_abs();
         }
     }
 }
 
-fn save_image_to_graphics_buffer(graphics_ctx: &mut GraphicsContext, image: &DynamicImage) {
+fn image_to_softbuffer(image: &DynamicImage) -> CachedSoftBufferImage {
     let buffer = image
         .as_rgba8()
         .map(|image| image.chunks(4))
         // SAFETY: `screenshots` crate and flameshot should both be returning either RGBA8 or RGB
         .unwrap_or_else(|| image.as_rgb8().unwrap().chunks(3));
 
-    let buffer: Vec<u32> = buffer
+    let buffer: CachedSoftBufferImage = buffer
         .map(|rgb| rgb[2] as u32 | ((rgb[1] as u32) << 8) | ((rgb[0] as u32) << 16))
         .collect();
 
-    graphics_ctx.set_buffer(&buffer, image.width() as u16, image.height() as u16);
+    buffer
 }
 
 fn draw_grid((width, height): (u32, u32), color_image: &mut DynamicImage, color: u8, zoom: usize) {

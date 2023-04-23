@@ -9,9 +9,12 @@ use winit::{
 };
 
 use crate::picker_context::PickerContext;
+use crate::Args;
 
-pub fn get_color(event_loop: &mut EventLoop<()>) -> Result<Option<(u8, u8, u8)>> {
-    let mut ctx = PickerContext::new(event_loop)?;
+pub fn get_color(args: &Args) -> Result<Option<(u8, u8, u8)>> {
+    let mut event_loop: EventLoop<()> = EventLoop::new();
+
+    let mut ctx = PickerContext::new(&event_loop, args)?;
 
     let mut position = None;
 
@@ -30,20 +33,26 @@ pub fn get_color(event_loop: &mut EventLoop<()>) -> Result<Option<(u8, u8, u8)>>
                 window_id,
             } => {
                 position = Some((new_position.cast::<u32>(), window_id));
-                ctx.request_draw(window_id);
-            }
-            Event::WindowEvent {
-                event: WindowEvent::CursorLeft { .. },
-                window_id,
-            } => {
-                position = None;
-                ctx.request_draw(window_id);
+
+                if ctx.should_display_zoom() {
+                    // Prevents initial incorrect mouse position from sticking to other windows
+                    ctx.request_draw_all();
+                }
             }
             Event::WindowEvent {
                 event:
                     WindowEvent::MouseInput {
                         state: ElementState::Pressed,
                         button: MouseButton::Left,
+                        ..
+                    }
+                    | WindowEvent::KeyboardInput {
+                        input:
+                            KeyboardInput {
+                                state: ElementState::Pressed,
+                                virtual_keycode: Some(VirtualKeyCode::Return),
+                                ..
+                            },
                         ..
                     },
                 ..
@@ -66,15 +75,13 @@ pub fn get_color(event_loop: &mut EventLoop<()>) -> Result<Option<(u8, u8, u8)>>
                         ..
                     },
                 ..
-            } => {
-                control_flow.set_exit();
-            }
+            } => control_flow.set_exit(),
             Event::WindowEvent {
                 event:
                     WindowEvent::KeyboardInput {
                         input:
                             KeyboardInput {
-                                state: ElementState::Pressed,
+                                state,
                                 virtual_keycode: Some(VirtualKeyCode::Z),
                                 ..
                             },
@@ -82,7 +89,10 @@ pub fn get_color(event_loop: &mut EventLoop<()>) -> Result<Option<(u8, u8, u8)>>
                     },
                 ..
             } => {
-                ctx.hold_zoom = true;
+                ctx.hold_zoom = match state {
+                    ElementState::Pressed => true,
+                    ElementState::Released => false,
+                };
 
                 if let Some((_, window_id)) = position {
                     ctx.request_draw(window_id);
@@ -90,23 +100,17 @@ pub fn get_color(event_loop: &mut EventLoop<()>) -> Result<Option<(u8, u8, u8)>>
             }
             Event::WindowEvent {
                 event:
-                    WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                state: ElementState::Released,
-                                virtual_keycode: Some(VirtualKeyCode::Z),
-                                ..
-                            },
+                    WindowEvent::MouseInput {
+                        state,
+                        button: MouseButton::Right,
                         ..
                     },
                 ..
-            } => {
-                ctx.hold_zoom = false;
-
-                if let Some((_, window_id)) = position {
-                    ctx.request_draw(window_id);
-                }
-            }
+            } =>
+                ctx.hold_right_click = match state {
+                    ElementState::Pressed => true,
+                    ElementState::Released => false,
+                },
             Event::WindowEvent {
                 event: WindowEvent::ModifiersChanged(ModifiersState::CTRL),
                 ..
@@ -126,10 +130,16 @@ pub fn get_color(event_loop: &mut EventLoop<()>) -> Result<Option<(u8, u8, u8)>>
                     },
                 ..
             } => {
-                ctx.change_zoom(vertical_amount);
+                if ctx.should_display_zoom() {
+                    if ctx.hold_right_click {
+                        ctx.change_zoom_size(vertical_amount);
+                    } else {
+                        ctx.change_zoom(vertical_amount);
+                    }
 
-                if let Some((_, window_id)) = position {
-                    ctx.request_draw(window_id);
+                    if let Some((_, window_id)) = position {
+                        ctx.request_draw(window_id);
+                    }
                 }
             }
             Event::RedrawRequested(window_id) => {
@@ -143,6 +153,34 @@ pub fn get_color(event_loop: &mut EventLoop<()>) -> Result<Option<(u8, u8, u8)>>
                 } else {
                     ctx.draw_empty_window(window_id);
                 }
+            }
+            Event::WindowEvent {
+                event:
+                    WindowEvent::KeyboardInput {
+                        input:
+                            KeyboardInput {
+                                state: ElementState::Pressed,
+                                virtual_keycode: Some(key),
+                                ..
+                            },
+                        ..
+                    },
+                ..
+            } => {
+                let (pos, window_id) = match position {
+                    Some((ref mut pos, window_id)) => (pos, window_id),
+                    _ => return,
+                };
+
+                match key {
+                    VirtualKeyCode::A | VirtualKeyCode::H | VirtualKeyCode::Left => pos.x -= 1,
+                    VirtualKeyCode::S | VirtualKeyCode::J | VirtualKeyCode::Down => pos.y += 1,
+                    VirtualKeyCode::W | VirtualKeyCode::K | VirtualKeyCode::Up => pos.y -= 1,
+                    VirtualKeyCode::D | VirtualKeyCode::L | VirtualKeyCode::Right => pos.x += 1,
+                    _ => return,
+                };
+
+                ctx.request_draw(window_id);
             }
             _ => (),
         }
