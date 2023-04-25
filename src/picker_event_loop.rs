@@ -8,17 +8,17 @@ use winit::{
     platform::run_return::EventLoopExtRunReturn,
 };
 
+use crate::args::Args;
 use crate::picker_context::PickerContext;
-use crate::Args;
 
-pub fn get_color(args: &Args) -> Result<Option<(u8, u8, u8)>> {
+pub fn launch_picker_gui(args: &Args) -> Result<Option<(u8, u8, u8)>> {
     let mut event_loop: EventLoop<()> = EventLoop::new();
 
     let mut ctx = PickerContext::new(&event_loop, args)?;
 
     let mut position = None;
 
-    let mut colors = None;
+    let mut color = None;
 
     let mut mouse_events = 0;
 
@@ -39,6 +39,7 @@ pub fn get_color(args: &Args) -> Result<Option<(u8, u8, u8)>> {
                 position = Some((new_position.cast::<u32>(), window_id));
 
                 if ctx.should_display_zoom() {
+                    ctx.set_cursor(true);
                     // Prevents initial incorrect mouse position from sticking to other windows
                     if mouse_events >= 5 {
                         ctx.request_draw_all();
@@ -65,9 +66,11 @@ pub fn get_color(args: &Args) -> Result<Option<(u8, u8, u8)>> {
                     },
                 ..
             } => {
-                if let Some(new_colors) = position.and_then(|(pos, id)| ctx.get_pixel(&id, pos)) {
+                let possible_color = position.and_then(|(pos, id)| ctx.get_pixel(&id, pos));
+
+                if let Some(new_color) = possible_color {
                     control_flow.set_exit();
-                    colors = Some(new_colors);
+                    color = Some(new_color);
                 }
             }
             Event::WindowEvent {
@@ -189,11 +192,12 @@ pub fn get_color(args: &Args) -> Result<Option<(u8, u8, u8)>> {
                     _ => return,
                 };
 
+                ctx.set_cursor(false);
                 ctx.request_draw(window_id);
             }
             _ => (),
         }
     });
 
-    Ok(colors)
+    Ok(color)
 }
