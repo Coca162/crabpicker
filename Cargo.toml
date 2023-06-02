@@ -1,6 +1,6 @@
 [package]
 name = "crabpicker"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 license = "AGPL-3.0-only"
 readme = "README.md"
@@ -14,13 +14,13 @@ include = ["src/**/*", "LICENSE", "README.md"]
 
 [dependencies]
 color-eyre = "0.6.2"
-winit = "0.28.3"
-screenshots = { version = "0.5.2", optional = true }
-image = { version = "0.24.5", default-features = false, features = ["png"] }
-softbuffer = "0.2.0"
+winit = "0.28.6"
+screenshots = { version = "0.5.4", optional = true }
+image = { version = "0.24.6", default-features = false, features = ["png"] }
+softbuffer = "0.2.1"
 copypasta-ext = { version = "0.4.4", default-features = false, features = ["x11-bin", "wayland-bin"] }
 termcolor = "1.2.0"
-clap = { version = "4.2.4", features = ["derive"] }
+clap = { version = "4.3.0", features = ["derive"] }
 x11 = { version = "2.21.0", features = ["xlib"], optional = true }
 
 [features]

@@ -29,10 +29,6 @@ pub struct Args {
     #[arg(short, long, default_value_t = ColorFormat::Hex)]
     pub format: ColorFormat,
 
-    /// Disables the terminal colors, useful for when piping to other programs
-    #[arg(long, default_value_t = false)]
-    pub disable_color: bool,
-
     /// Disables the clipboard
     #[arg(long, default_value_t = false)]
     pub disable_clipboard: bool,
